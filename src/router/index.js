@@ -21,6 +21,12 @@ const router = createRouter({
                     name: '物料标签',
                     component: () => import('@/views/print/material_label.vue'),
                     meta: { title: '物料标签', breadcrumb: ['打印', '物料标签'] }
+                },
+                {
+                    path: 'print/stihl_pallet_label',
+                    name: 'STIHL托盘标贴',
+                    component: () => import('@/views/print/stihl_pallet_label.vue'),
+                    meta: { title: 'STIHL托盘标贴', breadcrumb: ['打印', 'STIHL托盘标贴'] }
                 }
             ]
         }

@@ -21,9 +21,13 @@
                     <el-icon><Printer /></el-icon>
                     <span>打印</span>
                 </template>
-                <el-menu-item index="/print/material_label">
+                <!-- <el-menu-item index="/print/material_label">
                     <el-icon><Van /></el-icon>
                     <span>物料标签</span>
+                </el-menu-item> -->
+                <el-menu-item index="/print/stihl_pallet_label">
+                    <el-icon><Grid /></el-icon>
+                    <span>STIHL托盘标贴</span>
                 </el-menu-item>
                 <!-- <el-menu-item index="print2">
                     <el-icon><van /></el-icon>
