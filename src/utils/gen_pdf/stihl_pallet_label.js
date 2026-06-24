@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf'
 
-const font_file_path = '/src/assets/font/SourceHanSansCN-Normal.ttf'
+const font_file_path = '/assets/font/SourceHanSansCN-Normal.ttf'
 const font_family = 'SourceHanSansCN'
 
 // 标签
@@ -11,7 +11,7 @@ const gen_stihl_pallet_label = (options) => {
     f.setFont(font_family) // 设置字体
     f.setLineWidth(0.1)
     f.setFontSize(10)
-
+    f.text('中文字体',  67, 7)
     if (options.qr) f.addImage(options.qr, 'png', 5, 5, 60, 60)
     let blob = f.output('blob') // 生成PDF文件的Blob对象
     let url = URL.createObjectURL(blob) // 生成指向Blob对象的URL

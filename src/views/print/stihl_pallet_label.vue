@@ -10,15 +10,16 @@
                 sn_cnt: {},        // 当前序列号扫码计数
                 setting: {},
                 setting_default: {
-                    sn_limit: 10,      // 每个标签最大序列号数量, cache
-                    auto_print: true,  // 自动打印, cache
+                    sn_limit: 10,      // 每个标签最大序列号数量
+                    auto_print: true,  // 标签满足最大数量后自动打印
+                    auto_clear_after_print: true,  // 打印后自动清空序列号
                 },
                 audio: {
                     success: new Audio('/assets/audio/success.mp3'),
                     warn: new Audio('/assets/audio/warn.mp3')
                 },
                 dialogSettingVisible: false,
-                logs: [], // { t, nos }, cache
+                logs: [], // { t, sns }
                 ls: {
                     setting: 'stihl_pallet_label_setting',
                     logs: 'stihl_pallet_label_logs'
@@ -70,7 +71,6 @@
                     if (this.sns.size >= this.setting.sn_limit && this.setting.auto_print) {
                         this.gen_pdf_and_print()
                         this.add_log()
-                        this.clear_sns()
                     }
                     this.input = ''
                 }
@@ -111,6 +111,9 @@
                     })
                     this.iframe_print(pdf_url)
                     URL.revokeObjectURL(qrcode_url) // 释放内存
+                    if (this.setting.auto_clear_after_print) {
+                        this.clear_sns()
+                    }
                 }, 'image/png')
             }
         }
@@ -132,26 +135,27 @@
                     class="scan-input mb-15"
                     @keydown="input_keydown"
                     />
-                <el-row :gutter="10" class="mb-15">
+                <el-row :gutter="10">
                     <el-col :md="12">
-                        <el-descriptions title="打印设置" :column="1" size="small" border>
+                        <el-descriptions title="打印设置" :column="1" size="small" border class="mb-15">
                             <template #extra>
                                 <el-button size="small" @click="dialogSettingVisible = true">
                                     <el-icon><Edit /></el-icon> 修改
                                 </el-button>
                             </template>
                             <el-descriptions-item label="单标签最大序列号数量">{{ setting?.sn_limit }}</el-descriptions-item>
-                            <el-descriptions-item label="自动打印">{{ setting?.auto_print ? '是' : '否' }}</el-descriptions-item>
+                            <el-descriptions-item label="序列号已满自动打印">{{ setting?.auto_print ? '是' : '否' }}</el-descriptions-item>
+                            <el-descriptions-item label="打印后自动清空序列号">{{ setting?.auto_clear_after_print ? '是' : '否' }}</el-descriptions-item>
                         </el-descriptions>
                     </el-col>
                     <el-col :md="12">
-                        <el-button type="primary" size="large" class="print-btn" @click="gen_pdf_and_print">
+                        <el-button type="primary" size="large" class="print-btn mb-15" @click="gen_pdf_and_print">
                             <el-icon v-if="setting?.auto_print" class="is-loading mr-10"><RefreshRight /></el-icon> 打印
                         </el-button>
                     </el-col>
                 </el-row>
                 <!-- 当前序列号 -->
-                <el-card shadow="never">
+                <el-card shadow="never" class="mb-15">
                     <template #header>
                         <div class="card-header">
                             <div class="section-title">
@@ -220,8 +224,11 @@
                 <el-form-item label="单标签最大序列号数量">
                     <el-input-number v-model="setting.sn_limit" :min="1" :max="100" @change="setting_change" />
                 </el-form-item>
-                <el-form-item label="自动打印">
+                <el-form-item label="序列号已满自动打印">
                     <el-switch v-model="setting.auto_print" @change="setting_change" />
+                </el-form-item>
+                <el-form-item label="打印后自动清空序列号">
+                    <el-switch v-model="setting.auto_clear_after_print" @change="setting_change" />
                 </el-form-item>
             </el-form>
             <template #footer>
