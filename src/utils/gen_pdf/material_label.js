@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf'
 
-const font_file_path = '/src/assets/font/SourceHanSansCN-Normal.ttf'
+const font_file_path = '/assets/font/SourceHanSansCN-Normal.ttf'
 const font_family = 'SourceHanSansCN'
 
 // 标签
