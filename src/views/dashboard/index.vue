@@ -2,7 +2,7 @@
     export default {
         data() {
             return {
-                msg: 'Hello World!'
+                msg: '页面建设中!'
             }
         },
         mounted() {
@@ -17,7 +17,6 @@
 <template>
     <section>
         <el-text>
-            Dashboard
             {{  msg  }}
         </el-text>
     </section>

@@ -1,6 +1,8 @@
 <script>
-    import QRCode from 'qrcode'
-    import { gen_stihl_pallet_label } from '@/utils/gen_pdf/stihl_pallet_label'
+    import { ElLoading } from 'element-plus';
+    import QRCode from 'qrcode';
+    import * as XLSX from 'xlsx';
+    import { gen_stihl_pallet_label } from '@/utils/gen_pdf/stihl_pallet_label';
 
     export default {
         data() {
@@ -102,10 +104,6 @@
                 this.active_order.logs.unshift(log)
                 this.local_storage('orders')
             },
-            // init_logs() {
-            //     this.logs = []
-            //     localStorage.removeItem(this.ls.logs)
-            // },
             init_order_form() {
                 this.order_form = { orderno: '', pre: '', seq_s: 0, seq_e: 0, seq_l: 1, suf: '' }
             },
@@ -161,6 +159,13 @@
                         this.gen_pdf_and_print()
                     }
                     this.input = ''
+                }
+            },
+            new_order() {
+                if (this.orders.length >= 20) {
+                    this.$message({ message: '保存订单数量最多 20 个', type: 'warning', showClose: true })
+                } else {
+                    this.dialogOrderFormVisible = true
                 }
             },
             async save_order(){
@@ -227,15 +232,30 @@
                 if (checked_orders.length === 0) {
                     this.$message({ message: '请选择至少一个订单进行导出', type: 'error', showClose: true })
                 } else {
-                    // export code
+                    const loading = ElLoading.service({ lock: true, text: 'Loading', background: 'rgba(0, 0, 0, 0.7)' })
+                    let book = XLSX.utils.book_new()
+                    let table_head = ['订单号', '序列号', '是否打印', '打印时间']
+                    let table_body = []
+                    for (let order of checked_orders) {
+                        let pt = {} // 打印时间
+                        for (let log of order.logs) {
+                            for (let sn of log.sns) pt[sn] = new Date(log.t)
+                        }
+                        for (let sn of Object.keys(order.printed)) {
+                            table_body.push([order.orderno, sn, order.printed[sn] ? '是' : '否', pt[sn]])
+                        }
+                    }
+                    let sheet = XLSX.utils.aoa_to_sheet([table_head, ...table_body])
+                    XLSX.utils.book_append_sheet(book, sheet, 'STIHL订单')
+                    XLSX.writeFile(book, `STIHL订单_${this.strftime(Date.now())}.xlsx`, { compression: true, type: 'binary' });
                     this.$message({ message: '导出订单成功', type: 'success', showClose: true })
+                    loading.close()
                 }
             },
             show_order(order) {
                 this.drawer_order = order
                 this.drawer_tab = '0'
                 this.drawerOrderVisible = true
-                // console.log('show order', order)
             },
             print_percentage(order) {
                 let [a, b] = [0, 0]
@@ -315,7 +335,7 @@
     <section>
         <el-row :gutter="10">
             <el-col :md="12">
-                <!-- 扫码输入框 -->
+                <!-- 扫码输入框 --> 
                 <el-input
                     ref="input"
                     v-model="input"
@@ -323,12 +343,12 @@
                     clearable
                     clear-icon="CloseBold"
                     placeholder="Please input"
-                    class="scan-input mb-15"
+                    class="scan-input mb-10"
                     @keydown="input_keydown"
                     />
                 <el-row :gutter="10">
                     <el-col :md="12">
-                        <el-descriptions title="打印设置" :column="1" size="small" border class="mb-15">
+                        <el-descriptions title="打印设置" :column="1" size="small" border class="mb-10">
                             <template #extra>
                                 <el-button size="small" @click="dialogSettingFormVisible = true">
                                     <el-icon><Edit /></el-icon> 修改
@@ -340,13 +360,13 @@
                         </el-descriptions>
                     </el-col>
                     <el-col :md="12">
-                        <el-button type="primary" size="large" class="print-btn mb-15" @click="gen_pdf_and_print()">
+                        <el-button type="primary" size="large" class="print-btn mb-10" @click="gen_pdf_and_print()">
                             <el-icon v-if="setting?.auto_print" class="is-loading mr-10"><Setting /></el-icon> 打印
                         </el-button>
                     </el-col>
                 </el-row>
                 <!-- 当前序列号 -->
-                <el-card shadow="never" class="mb-15">
+                <el-card shadow="never" class="mb-10">
                     <template #header>
                         <div class="card-header">
                             <div class="section-title">
@@ -355,9 +375,7 @@
 
                             <el-popconfirm title="确认清空吗？" placement="bottom-end" @confirm="init_sns">
                                 <template #reference>
-                                    <el-button type="danger" size="small">
-                                        <el-icon><Delete /></el-icon> 清空
-                                    </el-button>
+                                    <el-button type="danger" size="small">清空</el-button>
                                 </template>
                             </el-popconfirm>
                         </div>
@@ -378,7 +396,7 @@
             <el-col :md="12">
                 <!-- 订单信息 -->
                 <div>
-                    <el-button type="primary" size="small" @click="dialogOrderFormVisible = true">新增</el-button>
+                    <el-button type="primary" size="small" @click="new_order">新增</el-button>
                     <el-button type="success" size="small" @click="activate_order">激活</el-button>
                     <el-popconfirm title="确认删除吗？" placement="bottom-end" @confirm="delete_order">
                         <template #reference>
@@ -388,19 +406,19 @@
                     <el-button size="small" @click="export_order">导出</el-button>
                     <el-button type="warning" size="small" @click="console.log($data)">DEBUG</el-button>
                 </div>
-                <el-table ref="orderTable" :data="orders" style="width: 100%">
+                <el-table ref="orderTable" :data="orders" style="width: 100%;" height="800">
                     <el-table-column type="selection" width="40" />
-                    <el-table-column property="orderno" label="订单号">
+                    <el-table-column property="orderno" label="订单号" width="120">
                         <template #default="scope">
                             <el-link type="primary" @click="show_order(scope.row)">{{ scope.row.orderno }}</el-link>
                         </template>
                     </el-table-column>
-                    <el-table-column property="seq" label="序列号" width="250">
+                    <el-table-column property="seq" label="序列号" width="220">
                         <template #default="scope">
                             {{ `${scope.row.pre}${get_seq(scope.row.seq_s, scope.row.seq_l)}${scope.row.suf}` }} ~ {{ `${scope.row.pre}${get_seq(scope.row.seq_e, scope.row.seq_l)}${scope.row.suf}` }}
                         </template>
                     </el-table-column>
-                    <el-table-column label="扫码进度" width="180">
+                    <el-table-column label="扫码进度">
                         <template #default="scope">
                             <el-progress
                                 :percentage="print_percentage(scope.row)"
@@ -418,7 +436,7 @@
                             <el-tag v-else type="info" size="small">未激活</el-tag>
                         </template>
                     </el-table-column>
-                    <el-table-column label="创建时间">
+                    <el-table-column label="创建时间" width="152">
                         <template #default="scope">{{ strftime(scope.row.t) }}</template>
                     </el-table-column>
                 </el-table>
@@ -491,8 +509,8 @@
             size="50%"
         >
             <el-tabs v-model="drawer_tab">
-                <el-tab-pane label="日志" name="0">
-                    <el-timeline v-if="drawer_order.logs.length" class="cc-timeline">
+                <el-tab-pane label="日志" name="0" class="drawer-tab-container">
+                    <el-timeline v-if="drawer_order.logs.length" style="padding-left: 9px;">
                         <el-timeline-item
                             v-for="(log, index) in drawer_order.logs"
                             :key="index"
@@ -512,7 +530,7 @@
                     </el-timeline>
                     <p v-else class="text-nomore">No Data</p>
                 </el-tab-pane>
-                <el-tab-pane label="明细" name="1">
+                <el-tab-pane label="明细" name="1" class="drawer-tab-container">
                     <el-tag v-for="(v, k) in drawer_order.printed" :key="k"
                         :type="v ? 'primary' : 'info'"
                         :effect="v ? 'light' : 'plain'"
@@ -562,19 +580,17 @@
         display: flex;
         justify-content: space-between;
     }
+    .mb-10 { margin-bottom: 10px; }
     .mb-15 {
         margin-bottom: 15px;
     }
-    .mr-10 {
-        margin-right: 10px;
-    }
+    .mr-10 { margin-right: 10px; }
     .print-btn {
         height: 100px;
         width: 100%;
         font-size: 36px;
     }
-    .cc-timeline {
-        padding-left: 9px;
+    .drawer-tab-container {
         overflow: auto;
         max-height: calc(100vh - 172px);
     }
