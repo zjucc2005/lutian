@@ -5,11 +5,13 @@
     export default {
         data() {
             return {
-                input: '',       // 输入框
-                sns: new Set(),  // 当前序列号列表
-                sn_cnt: {},      // 当前序列号扫码计数
-                orders: [],      // 订单信息， { orderno, pre, seq_s, seq_e, suf, active, printed, logs, t }
-                active_order: {},  // 当前扫码的订单
+                input: '',           // 输入框
+                sns: new Set(),      // 当前序列号列表
+                sn_cnt: {},          // 当前序列号扫码计数
+                orders: [],          // 订单信息， { orderno, pre, seq_s, seq_e, suf, active, printed, logs, t }
+                active_order: {},    // 当前扫码的订单
+                drawer_order: {},    // 当前显示详情的订单
+                drawer_tab: '0',       // drawer标签页
                 order_form: {
                     orderno: '',
                     pre: '',
@@ -52,10 +54,11 @@
                 setting_default: {
                     sn_limit: 38,      // 每个标签最大序列号数量
                     auto_print: true,  // 标签满足最大数量后自动打印
-                    auto_clear_after_print: true,  // 打印后自动清空序列号
+                    // auto_clear_after_print: true,  // 打印后自动清空序列号
                 },
                 dialogSettingFormVisible: false,
                 dialogOrderFormVisible: false,
+                drawerOrderVisible: false,
                 audio: {
                     success: new Audio('/assets/audio/success.mp3'),
                     warn: new Audio('/assets/audio/warn.mp3')
@@ -69,33 +72,40 @@
             }
         },
         mounted() {
-            let arr = []
-            for (let i = 0; i< 48; i++) {
-                if (i < 10) {
-                    arr.push(`01234567890${i}`)
-                } else {
-                    arr.push(`0123456789${i}`)
-                }
-            }
-            this.sns = new Set(arr)
+            // let arr = []
+            // for (let i = 0; i< 48; i++) {
+            //     if (i < 10) {
+            //         arr.push(`01234567890${i}`)
+            //     } else {
+            //         arr.push(`0123456789${i}`)
+            //     }
+            // }
+            // this.sns = new Set(arr)
             // 聚焦输入框
             this.$refs.input.focus() 
             // 初始化数据
             this.setting = JSON.parse(localStorage.getItem(this.ls.setting)) || this.setting_default
             this.init_order_form()
             this.orders = JSON.parse(localStorage.getItem(this.ls.orders)) || []
+            for (let order of this.orders) {
+                if (order.active) {
+                    this.active_order = order
+                    break
+                }
+            }
             this.logs = JSON.parse(localStorage.getItem(this.ls.logs)) || []
         },
         methods: {
             add_log() {
                 let log = { t: Date.now(), sns: Array.from(this.sns) }
-                this.logs.unshift(log)
-                localStorage.setItem(this.ls.logs, JSON.stringify(this.logs))
+                for (let sn of log.sns) this.active_order.printed[sn] = true
+                this.active_order.logs.unshift(log)
+                this.local_storage('orders')
             },
-            init_logs() {
-                this.logs = []
-                localStorage.removeItem(this.ls.logs)
-            },
+            // init_logs() {
+            //     this.logs = []
+            //     localStorage.removeItem(this.ls.logs)
+            // },
             init_order_form() {
                 this.order_form = { orderno: '', pre: '', seq_s: 0, seq_e: 0, seq_l: 1, suf: '' }
             },
@@ -103,15 +113,36 @@
                 this.sns = new Set()
                 this.sn_cnt = {}
             },
+            local_storage(field) {
+                localStorage.setItem(this.ls[field], JSON.stringify(this[field]))
+            },
             strftime(t) {
                 let date = new Date(t)
-                return date.toJSON().replace('T', ' ').split('.')[0]
+                return date.toLocaleString()
             },
             input_keydown(e) {
                 if (e.key == 'Enter') {
                     let sn = this.input.trim()
                     if (!sn) return
                     // check format of sn
+                    if (!this.active_order?.t) {
+                        this.$message({ message: '请先激活订单', type: 'error', showClose: true })
+                        this.audio.warn.play()
+                        this.input = ''
+                        return
+                    }
+                    if (this.active_order.printed[sn] === undefined) {
+                        this.$message({ message: `无效序列号, ${sn}`, type: 'error', showClose: true })
+                        this.audio.warn.play()
+                        this.input = ''
+                        return
+                    }
+                    if (this.active_order.printed[sn]) {
+                        this.$message({ message: `序列号已打印, ${sn}`, type: 'error', showClose: true })
+                        this.audio.warn.play()
+                        this.input = ''
+                        return
+                    }
                     if (this.sns.size >= this.setting.sn_limit) {
                         this.$message({ message: `单标签最大序列号数量不能超过 ${this.setting.sn_limit}`, type: 'error', showClose: true })
                         this.audio.warn.play()
@@ -121,7 +152,7 @@
                     this.sn_cnt[sn] = (this.sn_cnt[sn] || 0) + 1
                     if (this.sns.has(sn)) {
                         this.$message({ message: '重复扫码', type: 'warning', showClose: true })
-                        this.audio.warn.play()
+                        this.audio.success.play()
                     } else {
                         this.sns.add(sn)
                         this.audio.success.play()
@@ -144,24 +175,80 @@
                     }
                     // 生成序列号明细
                     for (let i = order.seq_s; i <= order.seq_e; i++) {
-                        let sn = order.pre + this.get_seq(i, order.seq_l)
+                        let sn = order.pre + this.get_seq(i, order.seq_l) + order.suf
                         order.printed[sn] = false
                     }
                     this.orders.unshift(order)
-                    localStorage.setItem(this.ls.orders, JSON.stringify(this.orders))
+                    this.local_storage('orders')
+                    this.dialogOrderFormVisible = false
                     this.init_order_form()
-                    console.log('order', order)
+                    this.$message({ message: '新增订单成功', type: 'success', showClose: true })
                 } catch (err) {
                     // console.log('err', err)
                 }
+            },
+            activate_order() {
+                let checked_orders = this.$refs.orderTable.getSelectionRows()
+                if (checked_orders.length === 0) {
+                    this.$message({ message: '请选择一个订单进行激活', type: 'error', showClose: true })
+                } else if (checked_orders.length === 1) {
+                    for (let order of this.orders) {
+                        if (order.t === checked_orders[0].t) {
+                            order.active = true
+                            this.active_order = order
+                        } else {
+                            order.active = false
+                        }
+                    }
+                    this.init_sns()
+                    this.local_storage('orders')
+                    this.$message({ message: '激活订单成功', type: 'success', showClose: true })
+                } else {
+                    this.$message({ message: '只能选择一个订单进行激活', type: 'error', showClose: true })
+                }
+            },
+            delete_order() {
+                let checked_orders = this.$refs.orderTable.getSelectionRows()
+                if (checked_orders.length === 0) {
+                    this.$message({ message: '请选择至少一个订单进行删除', type: 'error', showClose: true })
+                } else {
+                    let rem_orders = []
+                    let del_orders_t = new Set(checked_orders.map(o => o.t))
+                    for (let order of this.orders) {
+                        if (!del_orders_t.has(order.t)) rem_orders.push(order)
+                    }
+                    this.orders = rem_orders
+                    this.local_storage('orders')
+                    this.$message({ message: '删除订单成功', type: 'success', showClose: true })
+                }
+            },
+            export_order() {
+                let checked_orders = this.$refs.orderTable.getSelectionRows()
+                if (checked_orders.length === 0) {
+                    this.$message({ message: '请选择至少一个订单进行导出', type: 'error', showClose: true })
+                } else {
+                    // export code
+                    this.$message({ message: '导出订单成功', type: 'success', showClose: true })
+                }
+            },
+            show_order(order) {
+                this.drawer_order = order
+                this.drawer_tab = '0'
+                this.drawerOrderVisible = true
+                // console.log('show order', order)
+            },
+            print_percentage(order) {
+                let [a, b] = [0, 0]
+                for (let e of Object.values(order.printed)) {
+                    if (e) a++
+                    b++
+                }
+                return Math.round(a * 100 / b)
             },
             get_seq(i, len) {
                 let s = String(i)
                 while (s.length < len) s = `0${s}`
                 return s
-            },
-            setting_change() {
-                localStorage.setItem(this.ls.setting, JSON.stringify(this.setting))
             },
             // print function
             iframe_print(url) {
@@ -193,7 +280,6 @@
                 const canvas = await QRCode.toCanvas(content, { margin: 0 })
                 canvas.toBlob(async blob => {
                     const qrcode_url = URL.createObjectURL(blob);
-                    // console.log('qrcode_url:', qrcode_url)
                     let pdf_url = gen_stihl_pallet_label({
                         // ...data
                         qr: qrcode_url
@@ -201,9 +287,24 @@
                     this.iframe_print(pdf_url)
                     URL.revokeObjectURL(qrcode_url) // 释放内存
                     this.add_log()
-                    if (this.setting.auto_clear_after_print) {
-                        this.init_sns()
-                    }
+                    this.init_sns()
+                }, 'image/png')
+            },
+            async reprint(sns) {
+                if (!sns.length) {
+                    this.$message({ message: '当前序列号为空', type: 'warning', showClose: true })
+                    return
+                }
+                const content = sns.join(',') // 二维码内容
+                const canvas = await QRCode.toCanvas(content, { margin: 0 })
+                canvas.toBlob(async blob => {
+                    const qrcode_url = URL.createObjectURL(blob);
+                    let pdf_url = gen_stihl_pallet_label({
+                        // ...data
+                        qr: qrcode_url
+                    })
+                    this.iframe_print(pdf_url)
+                    URL.revokeObjectURL(qrcode_url) // 释放内存
                 }, 'image/png')
             }
         }
@@ -235,11 +336,11 @@
                             </template>
                             <el-descriptions-item label="单标签最大序列号数量">{{ setting?.sn_limit }}</el-descriptions-item>
                             <el-descriptions-item label="序列号已满自动打印">{{ setting?.auto_print ? '是' : '否' }}</el-descriptions-item>
-                            <el-descriptions-item label="打印后自动清空序列号">{{ setting?.auto_clear_after_print ? '是' : '否' }}</el-descriptions-item>
+                            <!-- <el-descriptions-item label="打印后自动清空序列号">{{ setting?.auto_clear_after_print ? '是' : '否' }}</el-descriptions-item> -->
                         </el-descriptions>
                     </el-col>
                     <el-col :md="12">
-                        <el-button type="primary" size="large" class="print-btn mb-15" @click="gen_pdf_and_print">
+                        <el-button type="primary" size="large" class="print-btn mb-15" @click="gen_pdf_and_print()">
                             <el-icon v-if="setting?.auto_print" class="is-loading mr-10"><Setting /></el-icon> 打印
                         </el-button>
                     </el-col>
@@ -278,20 +379,38 @@
                 <!-- 订单信息 -->
                 <div>
                     <el-button type="primary" size="small" @click="dialogOrderFormVisible = true">新增</el-button>
-                    <el-button type="success" size="small">激活</el-button>
-                    <el-button type="danger" size="small">删除</el-button>
-                    <el-button size="small">导出</el-button>
+                    <el-button type="success" size="small" @click="activate_order">激活</el-button>
+                    <el-popconfirm title="确认删除吗？" placement="bottom-end" @confirm="delete_order">
+                        <template #reference>
+                            <el-button type="danger" size="small">删除</el-button>
+                        </template>
+                    </el-popconfirm>
+                    <el-button size="small" @click="export_order">导出</el-button>
+                    <el-button type="warning" size="small" @click="console.log($data)">DEBUG</el-button>
                 </div>
-                <el-table :data="orders" style="width: 100%">
+                <el-table ref="orderTable" :data="orders" style="width: 100%">
                     <el-table-column type="selection" width="40" />
-                    <el-table-column property="orderno" label="订单号" />
+                    <el-table-column property="orderno" label="订单号">
+                        <template #default="scope">
+                            <el-link type="primary" @click="show_order(scope.row)">{{ scope.row.orderno }}</el-link>
+                        </template>
+                    </el-table-column>
                     <el-table-column property="seq" label="序列号" width="250">
                         <template #default="scope">
                             {{ `${scope.row.pre}${get_seq(scope.row.seq_s, scope.row.seq_l)}${scope.row.suf}` }} ~ {{ `${scope.row.pre}${get_seq(scope.row.seq_e, scope.row.seq_l)}${scope.row.suf}` }}
                         </template>
                     </el-table-column>
-                    <el-table-column label="扫码进度">
-                        <template #default="scope">{{ 1 }}</template>
+                    <el-table-column label="扫码进度" width="180">
+                        <template #default="scope">
+                            <el-progress
+                                :percentage="print_percentage(scope.row)"
+                                :stroke-width="10"
+                                :status="print_percentage(scope.row) >= 100 ? 'success' : ''"
+                                :striped="scope.row.active"
+                                :striped-flow="scope.row.active"
+                                :duration="6"
+                                />
+                        </template>
                     </el-table-column>
                     <el-table-column property="active" label="是否激活" width="80">
                         <template #default="scope">
@@ -303,37 +422,6 @@
                         <template #default="scope">{{ strftime(scope.row.t) }}</template>
                     </el-table-column>
                 </el-table>
-                <!-- 扫描日志 -->
-                <!-- <el-card shadow="never">
-                    <template #header>
-                        <div class="card-header">
-                            <div class="section-title">
-                                扫描日志 <el-text type="primary" class="text-bold">{{ logs.length }}</el-text> 行
-                            </div>
-                            <el-popconfirm title="确认清空吗？" placement="bottom-end" @confirm="init_logs">
-                                <template #reference>
-                                    <el-button type="danger" size="small">
-                                        <el-icon><Delete /></el-icon> 清空
-                                    </el-button>
-                                </template>
-                            </el-popconfirm>
-                        </div>
-                    </template>
-
-                    <el-timeline v-if="logs.length" style="padding-left: 20px; overflow: auto; max-height: calc(100vh - 137px);">
-                        <el-timeline-item
-                            v-for="(log, index) in logs"
-                            :key="index"
-                            :timestamp="strftime(log.t)"
-                            type="primary"
-                            placement="top"
-                            hollow
-                            >
-                            {{ log.sns.join(',') }}
-                        </el-timeline-item>
-                    </el-timeline>
-                    <p v-else class="text-nomore">No Data</p>
-                </el-card>    -->
             </el-col>
         </el-row>
 
@@ -341,22 +429,23 @@
         <el-dialog v-model="dialogSettingFormVisible" title="修改打印设置" width="480px">
             <el-form :model="setting" label-width="auto">
                 <el-form-item label="单标签最大序列号数量">
-                    <el-input-number v-model="setting.sn_limit" :min="1" :max="100" @change="setting_change" />
+                    <el-input-number v-model="setting.sn_limit" :min="1" :max="100" @change="local_storage('setting')" />
                 </el-form-item>
                 <el-form-item label="序列号已满自动打印">
-                    <el-switch v-model="setting.auto_print" @change="setting_change" />
+                    <el-switch v-model="setting.auto_print" @change="local_storage('setting')" />
                 </el-form-item>
-                <el-form-item label="打印后自动清空序列号">
-                    <el-switch v-model="setting.auto_clear_after_print" @change="setting_change" />
-                </el-form-item>
+                <!-- <el-form-item label="打印后自动清空序列号">
+                    <el-switch v-model="setting.auto_clear_after_print" @change="local_storage('setting')" />
+                </el-form-item> -->
             </el-form>
             <template #footer>
                 <div class="dialog-footer">
-                    <el-button @click="dialogSettinFormVisible = false">关闭</el-button>
+                    <el-button @click="dialogSettingFormVisible = false">关闭</el-button>
                 </div>
             </template>
         </el-dialog>
 
+        <!-- 订单表单 -->
         <el-dialog v-model="dialogOrderFormVisible" title="新增订单" width="600px">
             <el-form ref="order_form" :model="order_form" :rules="order_form_rules" label-width="auto">
                 <el-form-item label="订单号" prop="orderno">
@@ -394,9 +483,47 @@
             </template>
         </el-dialog>
 
-        <!-- <span>CHROME浏览器 --kiosk-printing</span>
-        {{ $data }} -->
-        <el-button type="warning" @click="console.log($data)">DEBUG</el-button>
+        <!-- 订单详情 -->
+        <el-drawer
+            v-model="drawerOrderVisible"
+            :title="drawer_order.orderno"
+            direction="rtl"
+            size="50%"
+        >
+            <el-tabs v-model="drawer_tab">
+                <el-tab-pane label="日志" name="0">
+                    <el-timeline v-if="drawer_order.logs.length" class="cc-timeline">
+                        <el-timeline-item
+                            v-for="(log, index) in drawer_order.logs"
+                            :key="index"
+                            :timestamp="strftime(log.t)"
+                            type="primary"
+                            placement="top"
+                            hollow
+                            >
+                            <el-tag v-for="(v, index) in log.sns" :key="index" size="small" round>{{ v }}</el-tag>
+                            <br>
+                            <el-popconfirm title="确认重新打印吗？" placement="bottom-end" width="160px" @confirm="reprint(log.sns)">
+                                <template #reference>
+                                    <el-link  underline="always" style="font-size: 12px;">重新打印</el-link>
+                                </template>
+                            </el-popconfirm>
+                        </el-timeline-item>
+                    </el-timeline>
+                    <p v-else class="text-nomore">No Data</p>
+                </el-tab-pane>
+                <el-tab-pane label="明细" name="1">
+                    <el-tag v-for="(v, k) in drawer_order.printed" :key="k"
+                        :type="v ? 'primary' : 'info'"
+                        :effect="v ? 'light' : 'plain'"
+                        size="small" round
+                        >
+                        {{ k }}
+                    </el-tag>
+                </el-tab-pane>
+            </el-tabs>
+        </el-drawer>
+        <!-- <span>CHROME浏览器 --kiosk-printing</span> -->
     </section>
 </template>
 
@@ -445,5 +572,10 @@
         height: 100px;
         width: 100%;
         font-size: 36px;
+    }
+    .cc-timeline {
+        padding-left: 9px;
+        overflow: auto;
+        max-height: calc(100vh - 172px);
     }
 </style>
