@@ -16,6 +16,9 @@
                 drawer_tab: '0',       // drawer标签页
                 order_form: {
                     orderno: '',
+                    mat_name: '',
+                    mat_no: '',
+                    ean: '',
                     pre: '',
                     seq_s: 0,
                     seq_e: 0,
@@ -25,6 +28,15 @@
                 order_form_rules: {
                     orderno: [
                         { required: true, message: '请输入订单号', trigger: 'blur' }
+                    ],
+                    mat_name: [
+                        { required: true, message: '请输入产品名称', trigger: 'blur' }
+                    ],
+                    mat_no: [
+                        { required: true, message: '请输入产品编码', trigger: 'blur' }
+                    ],
+                    ean: [
+                        { required: true, message: '请输入EAN编码', trigger: 'blur' }
                     ],
                     pre: [
                         { required: true, message: '请输入序列号前缀', trigger: 'blur' }
@@ -54,7 +66,7 @@
                 },
                 setting: {},
                 setting_default: {
-                    sn_limit: 10,      // 每个标签最大序列号数量
+                    sn_limit: 50,      // 每个标签最大序列号数量
                     auto_print: true,  // 标签满足最大数量后自动打印
                     // auto_clear_after_print: true,  // 打印后自动清空序列号
                 },
@@ -74,15 +86,11 @@
             }
         },
         mounted() {
-            // let arr = []
-            // for (let i = 0; i< 48; i++) {
-            //     if (i < 10) {
-            //         arr.push(`01234567890${i}`)
-            //     } else {
-            //         arr.push(`0123456789${i}`)
-            //     }
-            // }
-            // this.sns = new Set(arr)
+            let arr = []
+            for (let i = 1; i <= 100; i++) {
+                arr.push('12345' + this.get_seq(i, 4))
+            }
+            this.sns = new Set(arr)
             // 聚焦输入框
             this.$refs.input.focus() 
             // 初始化数据
@@ -98,6 +106,10 @@
             this.logs = JSON.parse(localStorage.getItem(this.ls.logs)) || []
         },
         methods: {
+            debug() {
+                console.log('>>> $data', this.$data)
+                console.log('>>>', QRCode)
+            },
             add_log() {
                 let log = { t: Date.now(), sns: Array.from(this.sns) }
                 for (let sn of log.sns) this.active_order.printed[sn] = true
@@ -269,11 +281,14 @@
                 return Math.min(Math.round(a * 100 / b), 99) 
             },
             get_seq(i, len) {
-                let s = String(i)
+                let s = String(i || 0)
                 while (s.length < len) s = `0${s}`
                 return s
             },
             // print function
+            qrcode_content(obj) {
+                return [obj.mat_no, obj.ean, '1/2', ...obj.sns].join('|')
+            },
             iframe_print(url) {
                 const iframe = document.createElement('iframe');
                 iframe.style.position = 'fixed';
@@ -299,19 +314,61 @@
                     this.$message({ message: '当前序列号为空', type: 'warning', showClose: true })
                     return
                 }
-                const content = Array.from(this.sns).join(',') // 二维码内容
-                const canvas = await QRCode.toCanvas(content, { margin: 0 })
-                canvas.toBlob(async blob => {
-                    const qrcode_url = URL.createObjectURL(blob);
-                    let pdf_url = gen_stihl_pallet_label({
-                        // ...data
-                        qr: qrcode_url
-                    })
-                    this.iframe_print(pdf_url)
-                    URL.revokeObjectURL(qrcode_url) // 释放内存
-                    this.add_log()
-                    this.init_sns()
-                }, 'image/png')
+                let data = {
+                    mat_name: this.active_order.mat_name,
+                    mat_no: this.active_order.mat_no,
+                    ean: this.active_order.ean,
+                    sns: Array.from(this.sns)
+                }
+                let canvas = await QRCode.toCanvas('test', { margin: 0, errorCorrectionLevel: 'M' })
+                data.qr = canvas.toDataURL()
+                console.log('>>> data', data)
+                // if (this.sns.size <= 200) {
+                //     let sns = Array.from(this.sns)
+                //     sns.sort((x, y) => x > y ? 1 : -1) // asc order
+                //     // array split to 50 per slice
+                //     let total_pages = Math.ceil(sns.length / 50)
+                //     for (let i = 0; i < total_pages; i++) {
+                //         data.push({
+                //             mat_name: this.active_order.mat_name,
+                //             mat_no: this.active_order.mat_no,
+                //             ean: this.active_order.ean,
+                //             sns: sns.slice( 50 * i, 50 *(i+1)),
+                //             page: i + 1,
+                //             total_pages: total_pages
+                //         })
+                //     }
+                // } else {
+                //     console.log('size > 200 situation')
+                // }
+                // for (let obj of data) {
+                //     let canvas = await QRCode.toCanvas(this.qrcode_content(obj), { margin: 0, errorCorrectionLevel: 'M' })
+                //     obj.qr = canvas.toDataURL()
+                //     // canvas.toBlob(blob => {
+                //     //     obj.qr = URL.createObjectURL(blob)
+                //     // })
+                // }
+            
+                let pdf_url = gen_stihl_pallet_label(data)
+                this.iframe_print(pdf_url)
+                URL.revokeObjectURL(pdf_url) // 释放内存
+                this.add_log()
+                this.init_sns()
+
+                console.log('tmp data', data)
+                // const content = Array.from(this.sns).join(',') // 二维码内容
+                // const canvas = await QRCode.toCanvas(content, { margin: 0, errorCorrectionLevel: 'M' })
+                // canvas.toBlob(blob => {
+                //     const qrcode_url = URL.createObjectURL(blob);
+                //     let pdf_url = gen_stihl_pallet_label({
+                //         // ...data
+                //         qr: qrcode_url
+                //     })
+                //     this.iframe_print(pdf_url)
+                //     URL.revokeObjectURL(qrcode_url) // 释放内存
+                //     this.add_log()
+                //     this.init_sns()
+                // }, 'image/png')
             },
             async reprint(sns) {
                 if (!sns.length) {
@@ -337,7 +394,7 @@
 <template>
     <section>
         <el-row :gutter="10">
-            <el-col :md="12">
+            <el-col :md="8">
                 <!-- 扫码输入框 --> 
                 <el-input
                     ref="input"
@@ -357,7 +414,7 @@
                                     <el-icon><Edit /></el-icon> 修改
                                 </el-button>
                             </template>
-                            <el-descriptions-item label="单标签最大序列号数量">{{ setting?.sn_limit }}</el-descriptions-item>
+                            <el-descriptions-item label="每托最大序列号数量">{{ setting?.sn_limit }}</el-descriptions-item>
                             <el-descriptions-item label="序列号已满自动打印">{{ setting?.auto_print ? '是' : '否' }}</el-descriptions-item>
                             <!-- <el-descriptions-item label="打印后自动清空序列号">{{ setting?.auto_clear_after_print ? '是' : '否' }}</el-descriptions-item> -->
                         </el-descriptions>
@@ -396,7 +453,7 @@
                 </el-card>
             </el-col>
 
-            <el-col :md="12">
+            <el-col :md="16">
                 <!-- 订单信息 -->
                 <div>
                     <el-button type="primary" @click="new_order">新增</el-button>
@@ -407,21 +464,30 @@
                         </template>
                     </el-popconfirm>
                     <el-button type="info" @click="export_order">导出</el-button>
-                    <el-button type="warning" @click="console.log($data)">DEBUG</el-button>
+                    <el-button type="warning" @click="debug">DEBUG</el-button>
                 </div>
-                <el-table ref="orderTable" :data="orders" style="width: 100%;" height="800">
+                <el-table ref="orderTable" :data="orders" height="800">
                     <el-table-column type="selection" width="40" />
-                    <el-table-column property="orderno" label="订单号" width="120">
+                    <el-table-column property="orderno" label="订单号" width="120" fixed>
                         <template #default="scope">
                             <el-link type="primary" @click="show_order(scope.row)">{{ scope.row.orderno }}</el-link>
                         </template>
                     </el-table-column>
+                    <el-table-column property="active" label="是否激活" width="80" fixed>
+                        <template #default="scope">
+                            <el-tag v-if="scope.row.active" type="success" size="small">已激活</el-tag>
+                            <el-tag v-else type="info" size="small">未激活</el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column property="mat_name" label="产品名称" />
+                    <el-table-column property="mat_no" label="产品编码" />
+                    <el-table-column property="ean" label="EAN编码" width="115" />
                     <el-table-column property="seq" label="序列号" width="220">
                         <template #default="scope">
                             {{ `${scope.row.pre}${get_seq(scope.row.seq_s, scope.row.seq_l)}${scope.row.suf}` }} ~ {{ `${scope.row.pre}${get_seq(scope.row.seq_e, scope.row.seq_l)}${scope.row.suf}` }}
                         </template>
                     </el-table-column>
-                    <el-table-column label="打印进度">
+                    <el-table-column label="打印进度" width="160">
                         <template #default="scope">
                             <el-progress
                                 :percentage="print_percentage(scope.row)"
@@ -431,12 +497,6 @@
                                 :striped-flow="scope.row.active"
                                 :duration="6"
                                 />
-                        </template>
-                    </el-table-column>
-                    <el-table-column property="active" label="是否激活" width="80">
-                        <template #default="scope">
-                            <el-tag v-if="scope.row.active" type="success" size="small">已激活</el-tag>
-                            <el-tag v-else type="info" size="small">未激活</el-tag>
                         </template>
                     </el-table-column>
                     <el-table-column label="创建时间" width="152">
@@ -449,7 +509,7 @@
         <!-- 修改打印设置 -->
         <el-dialog v-model="dialogSettingFormVisible" title="修改打印设置" width="480px">
             <el-form :model="setting" label-width="auto">
-                <el-form-item label="单标签最大序列号数量">
+                <el-form-item label="每托最大序列号数量">
                     <el-input-number v-model="setting.sn_limit" :min="1" :max="100" @change="local_storage('setting')" />
                 </el-form-item>
                 <el-form-item label="序列号已满自动打印">
@@ -472,15 +532,44 @@
                 <el-form-item label="订单号" prop="orderno">
                     <el-input v-model="order_form.orderno" />
                 </el-form-item>
+                <el-form-item label="产品名称" prop="mat_name">
+                    <el-input v-model="order_form.mat_name" />
+                </el-form-item>
+                <el-form-item label="产品编码" prop="mat_no">
+                    <el-input v-model="order_form.mat_no" />
+                </el-form-item>
+                <el-form-item label="EAN编码" prop="ean">
+                    <el-input v-model="order_form.ean" />
+                </el-form-item>
                 <el-form-item label="序列号前缀" prop="pre">
                     <el-input v-model="order_form.pre" />
                 </el-form-item>
-                <el-form-item label="流水号开始" prop="seq_s">
-                    <el-input-number v-model="order_form.seq_s" :min="0" />
-                </el-form-item>
-                <el-form-item label="流水号结束" prop="seq_e">
-                    <el-input-number v-model="order_form.seq_e" :min="0" />
-                </el-form-item>
+                <el-row :gutter="10">
+                    <el-col :span="12">
+                        <el-form-item label="流水号开始" prop="seq_s">
+                            <el-input-number v-model="order_form.seq_s" :min="0" />
+                        </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                        流水号预览：
+                        <el-text type="success" size="large">{{ order_form.pre }}</el-text>
+                        <el-text type="warning" size="large">{{ get_seq(order_form.seq_s, order_form.seq_l)  }}</el-text>
+                        <el-text type="danger" size="large">{{ order_form.suf }}</el-text>
+                    </el-col>
+                </el-row>
+                <el-row :gutter="10">
+                    <el-col :span="12">
+                        <el-form-item label="流水号结束" prop="seq_e">
+                            <el-input-number v-model="order_form.seq_e" :min="0" />
+                        </el-form-item>
+                    </el-col>
+                    <el-col :span="12">
+                        流水号预览：
+                        <el-text type="success" size="large">{{ order_form.pre }}</el-text>
+                        <el-text type="warning" size="large">{{ get_seq(order_form.seq_e, order_form.seq_l)  }}</el-text>
+                        <el-text type="danger" size="large">{{ order_form.suf }}</el-text>
+                    </el-col>
+                </el-row>
                 <el-form-item label="流水号长度" prop="seq_l">
                     <el-input-number v-model="order_form.seq_l" :min="1" />
                 </el-form-item>
@@ -488,14 +577,6 @@
                     <el-input v-model="order_form.suf" />
                 </el-form-item>
             </el-form>
-            <el-text type="info">
-                <p>示例序列号: 728130001 ~ 728130386</p>
-                <p>序列号前缀: 72813</p>
-                <p>流水号开始: 1</p>
-                <p>流水号结束: 386</p>
-                <p>流水号长度: 4</p>
-                <p>序列号后缀: </p>
-            </el-text>
             <template #footer>
                 <div class="dialog-footer">
                     <el-button @click="dialogOrderFormVisible = false">关闭</el-button>

@@ -32,6 +32,7 @@
             </transition-group>
         </el-breadcrumb>
         <!-- dropdownmenu -->
+        <el-text style="padding-right: 15px;">绿田机械股份有限公司</el-text>
     </div>
 </template>
 

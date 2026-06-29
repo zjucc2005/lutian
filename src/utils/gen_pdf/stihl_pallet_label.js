@@ -1,10 +1,12 @@
-import jsPDF from 'jspdf'
+import jsPDF from 'jspdf';
+import QRCode from 'qrcode';
+
 
 const font_file_path = '/assets/font/SourceHanSansCN-Normal.ttf'
 const font_family = 'SourceHanSansCN'
 
-// 标签
-// options = { qr }
+// 序列号个数 (10,200]
+// options = [ { mat_name, mat_no, ean, sns, page, total_pages } ]
 const gen_stihl_pallet_label = (options) => {
     let f = new jsPDF({ orientation: 'landscape', format: [100, 70] })
     f.addFont(font_file_path, font_family, 'normal') // 加载字体
@@ -18,6 +20,11 @@ const gen_stihl_pallet_label = (options) => {
     return url
 }
 
+
+// 序列号个数 (200, ∞)
+const gen_stihl_pallet_label_2 = (options) => {
+
+}
 
 // @param f, jsPDF instance
 // @param options, Object, input varible
@@ -88,5 +95,6 @@ const set_template = (f, options, _x, _y) => {
 }
 
 export {
-    gen_stihl_pallet_label
+    gen_stihl_pallet_label,
+    gen_stihl_pallet_label_2
 }
