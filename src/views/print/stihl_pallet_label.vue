@@ -54,7 +54,7 @@
                 },
                 setting: {},
                 setting_default: {
-                    sn_limit: 38,      // 每个标签最大序列号数量
+                    sn_limit: 10,      // 每个标签最大序列号数量
                     auto_print: true,  // 标签满足最大数量后自动打印
                     // auto_clear_after_print: true,  // 打印后自动清空序列号
                 },
@@ -163,7 +163,7 @@
             },
             new_order() {
                 if (this.orders.length >= 20) {
-                    this.$message({ message: '保存订单数量最多 20 个', type: 'warning', showClose: true })
+                    this.$message({ message: '保存订单数量已达 20 个上限，请先删除再新增', type: 'warning', showClose: true })
                 } else {
                     this.dialogOrderFormVisible = true
                 }
@@ -234,15 +234,16 @@
                 } else {
                     const loading = ElLoading.service({ lock: true, text: 'Loading', background: 'rgba(0, 0, 0, 0.7)' })
                     let book = XLSX.utils.book_new()
-                    let table_head = ['订单号', '序列号', '是否打印', '打印时间']
+                    let table_head = ['订单号', '托盘序号', '序列号', '是否打印', '打印时间']
                     let table_body = []
                     for (let order of checked_orders) {
-                        let pt = {} // 打印时间
-                        for (let log of order.logs) {
-                            for (let sn of log.sns) pt[sn] = new Date(log.t)
+                        let pt = {} // 托盘序号 + 打印时间
+                        for (let i = 0; i < order.logs.length; i++) {
+                            let log = order.logs[i]
+                            for (let sn of log.sns) pt[sn] = [order.logs.length - i, new Date(log.t)]
                         }
                         for (let sn of Object.keys(order.printed)) {
-                            table_body.push([order.orderno, sn, order.printed[sn] ? '是' : '否', pt[sn]])
+                            table_body.push([order.orderno, pt[sn]?.[0], sn, order.printed[sn] ? '是' : '否', pt[sn]?.[1]])
                         }
                     }
                     let sheet = XLSX.utils.aoa_to_sheet([table_head, ...table_body])
@@ -263,7 +264,9 @@
                     if (e) a++
                     b++
                 }
-                return Math.round(a * 100 / b)
+                if (a === 0) return 0
+                if (a === b) return 100
+                return Math.min(Math.round(a * 100 / b), 99) 
             },
             get_seq(i, len) {
                 let s = String(i)
@@ -375,7 +378,7 @@
 
                             <el-popconfirm title="确认清空吗？" placement="bottom-end" @confirm="init_sns">
                                 <template #reference>
-                                    <el-button type="danger" size="small">清空</el-button>
+                                    <el-button type="danger">清空</el-button>
                                 </template>
                             </el-popconfirm>
                         </div>
@@ -396,15 +399,15 @@
             <el-col :md="12">
                 <!-- 订单信息 -->
                 <div>
-                    <el-button type="primary" size="small" @click="new_order">新增</el-button>
-                    <el-button type="success" size="small" @click="activate_order">激活</el-button>
+                    <el-button type="primary" @click="new_order">新增</el-button>
+                    <el-button type="success" @click="activate_order">激活</el-button>
                     <el-popconfirm title="确认删除吗？" placement="bottom-end" @confirm="delete_order">
                         <template #reference>
-                            <el-button type="danger" size="small">删除</el-button>
+                            <el-button type="danger">删除</el-button>
                         </template>
                     </el-popconfirm>
-                    <el-button size="small" @click="export_order">导出</el-button>
-                    <el-button type="warning" size="small" @click="console.log($data)">DEBUG</el-button>
+                    <el-button type="info" @click="export_order">导出</el-button>
+                    <el-button type="warning" @click="console.log($data)">DEBUG</el-button>
                 </div>
                 <el-table ref="orderTable" :data="orders" style="width: 100%;" height="800">
                     <el-table-column type="selection" width="40" />
@@ -418,7 +421,7 @@
                             {{ `${scope.row.pre}${get_seq(scope.row.seq_s, scope.row.seq_l)}${scope.row.suf}` }} ~ {{ `${scope.row.pre}${get_seq(scope.row.seq_e, scope.row.seq_l)}${scope.row.suf}` }}
                         </template>
                     </el-table-column>
-                    <el-table-column label="扫码进度">
+                    <el-table-column label="打印进度">
                         <template #default="scope">
                             <el-progress
                                 :percentage="print_percentage(scope.row)"
@@ -581,9 +584,7 @@
         justify-content: space-between;
     }
     .mb-10 { margin-bottom: 10px; }
-    .mb-15 {
-        margin-bottom: 15px;
-    }
+    .mb-15 { margin-bottom: 15px; }
     .mr-10 { margin-right: 10px; }
     .print-btn {
         height: 100px;
