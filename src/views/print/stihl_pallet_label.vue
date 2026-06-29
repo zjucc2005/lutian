@@ -1,6 +1,7 @@
 <script>
     import { ElLoading } from 'element-plus';
     import QRCode from 'qrcode';
+    import JsBarcode from 'jsbarcode';
     import * as XLSX from 'xlsx';
     import { gen_stihl_pallet_label } from '@/utils/gen_pdf/stihl_pallet_label';
 
@@ -86,11 +87,11 @@
             }
         },
         mounted() {
-            let arr = []
-            for (let i = 1; i <= 100; i++) {
-                arr.push('12345' + this.get_seq(i, 4))
-            }
-            this.sns = new Set(arr)
+            // let arr = []
+            // for (let i = 1; i <= 73; i++) {
+            //     arr.push('12345' + this.get_seq(i, 4))
+            // }
+            // this.sns = new Set(arr)
             // 聚焦输入框
             this.$refs.input.focus() 
             // 初始化数据
@@ -286,8 +287,79 @@
                 return s
             },
             // print function
-            qrcode_content(obj) {
-                return [obj.mat_no, obj.ean, '1/2', ...obj.sns].join('|')
+            qrcode_content(mat_no, ean, fraction, sns) {
+                return [mat_no, ean, fraction, ...sns].join('|') + '|'
+            },
+            // return image URL
+            async draw_qrcode(text) {
+                let canvas = await QRCode.toCanvas(text, { margin: 1, errorCorrectionLevel: 'M' })
+                // console.log('>>> canvas.toDataURL()', canvas.toDataURL())
+                return canvas.toDataURL()
+            },
+            draw_barcode_128(text) {
+                let canvas = this.$refs.canvas
+                JsBarcode(canvas, text, { height: 80, fontSize: 20 });
+                // console.log('>>> canvas.toDataURL()', canvas.toDataURL())
+                return canvas.toDataURL()
+            },
+            draw_barcode_upc(text) {
+                let canvas = this.$refs.canvas
+                JsBarcode(canvas, text, { format: 'upc', height: 80 });
+                // console.log('>>> canvas.toDataURL()', canvas.toDataURL())
+                return canvas.toDataURL()
+            },
+            async init_print_option(order, sns) {
+                let data = []
+                sns = Array.from(sns)
+                sns.sort((x, y) => x > y ? 1 : -1) // asc order
+                let total_pages = Math.ceil(sns.length / 50) // array split to 50 per slice
+                for (let i = 0; i < total_pages; i++) {
+                    let sns_per_page = sns.slice(50 * i, 50 * (i + 1))
+                    let fraction = `${i+1}/${total_pages}`
+                    let obj = {
+                        mat_name: order.mat_name,
+                        mat_no: order.mat_no,
+                        page: i + 1,
+                        total_pages: total_pages,
+                        _ean: this.draw_barcode_upc(order.ean),
+                        _qr: await this.draw_qrcode(this.qrcode_content(order.mat_no, order.ean, fraction, sns_per_page)),
+                        _sns: []
+                    }
+                    for (let sn of sns_per_page) {
+                        obj._sns.push(this.draw_barcode_128(sn))
+                    }
+                    data.push(obj)
+                }
+                return data
+            },
+            // 待定
+            async init_print_option_2() {
+                let data = []
+                let sns = Array.from(this.sns)
+                sns.sort((x, y) => x > y ? 1 : -1) // asc order
+                let total_pages = Math.ceil(sns.length / 420)
+                let fenmu = Math.ceil(sns.length / 70)
+                for (let i = 0 ; i < total_pages; i++) {
+                    let sns_per_page = sns.slice(420 * i, 420 * (i + 1))
+                    let obj = {
+                        mat_name: this.active_order.mat_name,
+                        mat_no: this.active_order.mat_no,
+                        page: i + 1,
+                        total_pages: total_pages,
+                        _ean: this.draw_barcode_upc(this.active_order.ean),
+                        _qrs: []
+                    }
+                    let qr_cnt = Math.ceil(sns_per_page.length / 70)
+                    for (let j = 0; j < qr_cnt; j++) {
+                        let sns_per_qr = sns_per_page.slice(70 * j, 70 * (j + 1))
+                        let fraction = `${i * 6 + j + 1}/${fenmu}`
+                        obj._qrs.push(
+                            await this.draw_qrcode(this.qrcode_content(this.active_order.mat_no, this.active_order.ean, fraction, sns_per_qr))
+                        )
+                    }
+                    data.push(obj)
+                }
+                return data
             },
             iframe_print(url) {
                 const iframe = document.createElement('iframe');
@@ -314,78 +386,31 @@
                     this.$message({ message: '当前序列号为空', type: 'warning', showClose: true })
                     return
                 }
-                let data = {
-                    mat_name: this.active_order.mat_name,
-                    mat_no: this.active_order.mat_no,
-                    ean: this.active_order.ean,
-                    sns: Array.from(this.sns)
+                let data = []
+                if (this.sns.size <= 200) {
+                    data = await this.init_print_option(this.active_order, this.sns)
+                    // console.log('>>> print data', data)
+                    let pdf_url = gen_stihl_pallet_label(data)
+                    this.iframe_print(pdf_url)
+                    URL.revokeObjectURL(pdf_url) // 释放内存
+                    this.add_log()
+                    this.init_sns()
+                } else {
+                    // data = this.init_print_option_2()
                 }
-                let canvas = await QRCode.toCanvas('test', { margin: 0, errorCorrectionLevel: 'M' })
-                data.qr = canvas.toDataURL()
-                console.log('>>> data', data)
-                // if (this.sns.size <= 200) {
-                //     let sns = Array.from(this.sns)
-                //     sns.sort((x, y) => x > y ? 1 : -1) // asc order
-                //     // array split to 50 per slice
-                //     let total_pages = Math.ceil(sns.length / 50)
-                //     for (let i = 0; i < total_pages; i++) {
-                //         data.push({
-                //             mat_name: this.active_order.mat_name,
-                //             mat_no: this.active_order.mat_no,
-                //             ean: this.active_order.ean,
-                //             sns: sns.slice( 50 * i, 50 *(i+1)),
-                //             page: i + 1,
-                //             total_pages: total_pages
-                //         })
-                //     }
-                // } else {
-                //     console.log('size > 200 situation')
-                // }
-                // for (let obj of data) {
-                //     let canvas = await QRCode.toCanvas(this.qrcode_content(obj), { margin: 0, errorCorrectionLevel: 'M' })
-                //     obj.qr = canvas.toDataURL()
-                //     // canvas.toBlob(blob => {
-                //     //     obj.qr = URL.createObjectURL(blob)
-                //     // })
-                // }
-            
-                let pdf_url = gen_stihl_pallet_label(data)
-                this.iframe_print(pdf_url)
-                URL.revokeObjectURL(pdf_url) // 释放内存
-                this.add_log()
-                this.init_sns()
-
-                console.log('tmp data', data)
-                // const content = Array.from(this.sns).join(',') // 二维码内容
-                // const canvas = await QRCode.toCanvas(content, { margin: 0, errorCorrectionLevel: 'M' })
-                // canvas.toBlob(blob => {
-                //     const qrcode_url = URL.createObjectURL(blob);
-                //     let pdf_url = gen_stihl_pallet_label({
-                //         // ...data
-                //         qr: qrcode_url
-                //     })
-                //     this.iframe_print(pdf_url)
-                //     URL.revokeObjectURL(qrcode_url) // 释放内存
-                //     this.add_log()
-                //     this.init_sns()
-                // }, 'image/png')
             },
             async reprint(sns) {
                 if (!sns.length) {
                     this.$message({ message: '当前序列号为空', type: 'warning', showClose: true })
                     return
                 }
-                const content = sns.join(',') // 二维码内容
-                const canvas = await QRCode.toCanvas(content, { margin: 0 })
-                canvas.toBlob(async blob => {
-                    const qrcode_url = URL.createObjectURL(blob);
-                    let pdf_url = gen_stihl_pallet_label({
-                        // ...data
-                        qr: qrcode_url
-                    })
+                let data = []
+                if (sns.length <= 200) {
+                    data = await this.init_print_option(this.drawer_order, sns)
+                    let pdf_url = gen_stihl_pallet_label(data)
                     this.iframe_print(pdf_url)
-                    URL.revokeObjectURL(qrcode_url) // 释放内存
-                }, 'image/png')
+                    URL.revokeObjectURL(pdf_url) // 释放内存
+                }
             }
         }
     }
@@ -393,6 +418,8 @@
 
 <template>
     <section>
+        <!-- 绘图用画布 -->
+        <canvas ref="canvas" style="display: none;"></canvas>
         <el-row :gutter="10">
             <el-col :md="8">
                 <!-- 扫码输入框 --> 
@@ -464,7 +491,7 @@
                         </template>
                     </el-popconfirm>
                     <el-button type="info" @click="export_order">导出</el-button>
-                    <el-button type="warning" @click="debug">DEBUG</el-button>
+                    <!-- <el-button type="warning" @click="debug">DEBUG</el-button> -->
                 </div>
                 <el-table ref="orderTable" :data="orders" height="800">
                     <el-table-column type="selection" width="40" />
@@ -510,7 +537,7 @@
         <el-dialog v-model="dialogSettingFormVisible" title="修改打印设置" width="480px">
             <el-form :model="setting" label-width="auto">
                 <el-form-item label="每托最大序列号数量">
-                    <el-input-number v-model="setting.sn_limit" :min="1" :max="100" @change="local_storage('setting')" />
+                    <el-input-number v-model="setting.sn_limit" :min="1" :max="200" @change="local_storage('setting')" />
                 </el-form-item>
                 <el-form-item label="序列号已满自动打印">
                     <el-switch v-model="setting.auto_print" @change="local_storage('setting')" />
