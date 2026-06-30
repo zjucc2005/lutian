@@ -3,7 +3,7 @@
     import QRCode from 'qrcode';
     import JsBarcode from 'jsbarcode';
     import * as XLSX from 'xlsx';
-    import { gen_stihl_pallet_label } from '@/utils/gen_pdf/stihl_pallet_label';
+    import { gen_stihl_pallet_label, gen_stihl_pallet_label_2 } from '@/utils/gen_pdf/stihl_pallet_label';
 
     export default {
         data() {
@@ -82,13 +82,12 @@
                     orders: 'stihl_pallet_label_orders',
                     setting: 'stihl_pallet_label_setting',
                     logs: 'stihl_pallet_label_logs'
-                },
-                logs: [], // { t, sns }
+                }
             }
         },
         mounted() {
             // let arr = []
-            // for (let i = 1; i <= 73; i++) {
+            // for (let i = 1; i <= 48; i++) {
             //     arr.push('12345' + this.get_seq(i, 4))
             // }
             // this.sns = new Set(arr)
@@ -104,7 +103,6 @@
                     break
                 }
             }
-            this.logs = JSON.parse(localStorage.getItem(this.ls.logs)) || []
         },
         methods: {
             debug() {
@@ -333,20 +331,20 @@
                 return data
             },
             // 待定
-            async init_print_option_2() {
+            async init_print_option_2(order, sns) {
                 let data = []
-                let sns = Array.from(this.sns)
+                sns = Array.from(sns)
                 sns.sort((x, y) => x > y ? 1 : -1) // asc order
                 let total_pages = Math.ceil(sns.length / 420)
                 let fenmu = Math.ceil(sns.length / 70)
                 for (let i = 0 ; i < total_pages; i++) {
                     let sns_per_page = sns.slice(420 * i, 420 * (i + 1))
                     let obj = {
-                        mat_name: this.active_order.mat_name,
-                        mat_no: this.active_order.mat_no,
+                        mat_name: order.mat_name,
+                        mat_no: order.mat_no,
                         page: i + 1,
                         total_pages: total_pages,
-                        _ean: this.draw_barcode_upc(this.active_order.ean),
+                        _ean: this.draw_barcode_upc(order.ean),
                         _qrs: []
                     }
                     let qr_cnt = Math.ceil(sns_per_page.length / 70)
@@ -354,7 +352,7 @@
                         let sns_per_qr = sns_per_page.slice(70 * j, 70 * (j + 1))
                         let fraction = `${i * 6 + j + 1}/${fenmu}`
                         obj._qrs.push(
-                            await this.draw_qrcode(this.qrcode_content(this.active_order.mat_no, this.active_order.ean, fraction, sns_per_qr))
+                            await this.draw_qrcode(this.qrcode_content(order.mat_no, order.ean, fraction, sns_per_qr))
                         )
                     }
                     data.push(obj)
@@ -362,6 +360,7 @@
                 return data
             },
             iframe_print(url) {
+                if (!url) return
                 const iframe = document.createElement('iframe');
                 iframe.style.position = 'fixed';
                 iframe.style.right = '0';
@@ -387,16 +386,20 @@
                     return
                 }
                 let data = []
+                let pdf_url = ''
                 if (this.sns.size <= 200) {
                     data = await this.init_print_option(this.active_order, this.sns)
                     // console.log('>>> print data', data)
-                    let pdf_url = gen_stihl_pallet_label(data)
+                    pdf_url = gen_stihl_pallet_label(data)
+                } else {
+                    data = await this.init_print_option_2(this.active_order, this.sns)
+                    // console.log('>>> print data', data)
+                    pdf_url = gen_stihl_pallet_label_2(data)
+                }
+                if (pdf_url) {
                     this.iframe_print(pdf_url)
-                    URL.revokeObjectURL(pdf_url) // 释放内存
                     this.add_log()
                     this.init_sns()
-                } else {
-                    // data = this.init_print_option_2()
                 }
             },
             async reprint(sns) {
@@ -405,12 +408,15 @@
                     return
                 }
                 let data = []
+                let pdf_url = ''
                 if (sns.length <= 200) {
                     data = await this.init_print_option(this.drawer_order, sns)
-                    let pdf_url = gen_stihl_pallet_label(data)
-                    this.iframe_print(pdf_url)
-                    URL.revokeObjectURL(pdf_url) // 释放内存
+                    pdf_url = gen_stihl_pallet_label(data)
+                } else {
+                    data = await this.init_print_option_2(this.drawer_order, sns)
+                    pdf_url = gen_stihl_pallet_label_2(data)
                 }
+                this.iframe_print(pdf_url)
             }
         }
     }
