@@ -198,6 +198,7 @@
                     for (let field of ['orderno', 'mat_name', 'mat_no', 'ean', 'pre', 'suf']) {
                         order[field] = order[field].trim()
                     }
+                    order.orderno = order.orderno.toUpperCase()
                     // 生成序列号明细
                     for (let i = order.seq_s; i <= order.seq_e; i++) {
                         let sn = order.pre + this.get_seq(i, order.seq_l) + order.suf
@@ -461,8 +462,8 @@
                                 </el-button>
                             </template>
                             <el-descriptions-item label="每托最大序列号数量">{{ setting?.sn_limit }}</el-descriptions-item>
-                            <el-descriptions-item label="序列号已满自动打印">{{ setting?.auto_print ? '是' : '否' }}</el-descriptions-item>
                             <el-descriptions-item label="打印份数">{{ setting?.print_copies }}</el-descriptions-item>
+                            <el-descriptions-item label="序列号已满自动打印">{{ setting?.auto_print ? '是' : '否' }}</el-descriptions-item>
                         </el-descriptions>
                     </el-col>
                     <el-col :md="12">
@@ -510,11 +511,11 @@
                         </template>
                     </el-popconfirm>
                     <el-button type="info" @click="export_order">导出</el-button>
-                    <el-button type="warning" @click="debug">DEBUG</el-button>
+                    <!-- <el-button type="warning" @click="debug">DEBUG</el-button> -->
                 </div>
                 <el-table ref="orderTable" :data="orders" height="800">
                     <el-table-column type="selection" width="40" />
-                    <el-table-column property="orderno" label="订单号" width="120" fixed>
+                    <el-table-column property="orderno" label="订单号" fixed>
                         <template #default="scope">
                             <el-link type="primary" @click="show_order(scope.row)">{{ scope.row.orderno }}</el-link>
                         </template>
@@ -526,7 +527,7 @@
                         </template>
                     </el-table-column>
                     <el-table-column property="mat_name" label="产品名称" />
-                    <el-table-column property="mat_no" label="产品编码" />
+                    <el-table-column property="mat_no" label="产品编码" width="125" />
                     <el-table-column property="ean" label="EAN编码" width="115" />
                     <el-table-column property="seq" label="序列号" width="220">
                         <template #default="scope">
@@ -558,11 +559,11 @@
                 <el-form-item label="每托最大序列号数量">
                     <el-input-number v-model="setting.sn_limit" :min="1" :max="200" @change="local_storage('setting')" />
                 </el-form-item>
-                <el-form-item label="序列号已满自动打印">
-                    <el-switch v-model="setting.auto_print" @change="local_storage('setting')" />
-                </el-form-item>
                 <el-form-item label="打印份数">
                     <el-input-number v-model="setting.print_copies" :min="1" :max="4" @change="local_storage('setting')" />
+                </el-form-item>
+                <el-form-item label="序列号已满自动打印">
+                    <el-switch v-model="setting.auto_print" @change="local_storage('setting')" />
                 </el-form-item>
             </el-form>
             <template #footer>
