@@ -15,30 +15,20 @@
                 active_order: {},    // 当前扫码的订单
                 drawer_order: {},    // 当前显示详情的订单
                 drawer_tab: '0',       // drawer标签页
-                order_form: {
-                    orderno: '',
-                    mat_name: '',
-                    mat_no: '',
-                    ean: '',
-                    pre: '',
-                    seq_s: 0,
-                    seq_e: 0,
-                    seq_l: 1,
-                    suf: '',
-                },
+                order_form: {},
                 order_form_rules: {
                     orderno: [
                         { required: true, message: '请输入订单号', trigger: 'blur' }
                     ],
                     mat_name: [
-                        { required: true, message: '请输入产品名称', trigger: 'blur' }
+                        { required: true, message: '请选择产品名称', trigger: 'blur' }
                     ],
                     mat_no: [
-                        { required: true, message: '请输入产品编码', trigger: 'blur' }
+                        { required: true, message: '请选择产品编码', trigger: 'blur' }
                     ],
-                    ean: [
-                        { required: true, message: '请输入EAN编码', trigger: 'blur' }
-                    ],
+                    // ean: [
+                    //     { required: true, message: '请输入EAN编码', trigger: 'blur' }
+                    // ],
                     pre: [
                         { required: true, message: '请输入序列号前缀', trigger: 'blur' }
                     ],
@@ -69,7 +59,7 @@
                 setting_default: {
                     sn_limit: 50,      // 每个标签最大序列号数量
                     auto_print: true,  // 标签满足最大数量后自动打印
-                    // auto_clear_after_print: true,  // 打印后自动清空序列号
+                    print_copies: 1,   // 打印份数
                 },
                 dialogSettingFormVisible: false,
                 dialogOrderFormVisible: false,
@@ -82,12 +72,25 @@
                     orders: 'stihl_pallet_label_orders',
                     setting: 'stihl_pallet_label_setting',
                     logs: 'stihl_pallet_label_logs'
+                },
+                // 产品名称，编码，EAN码之间对应关系
+                mat_enum: {
+                    'RE05': {
+                        'RE05-011-4500': { ean: '198520047497', memo: '中国' },
+                        'RE05-011-4501': { ean: '198520047503', memo: '印度' },
+                        'RE05-011-4502': { ean: '198520047510', memo: '泰国' },
+                        'RE05-011-4504': { ean: '198520047534', memo: '马来西亚和新加坡' },
+                        'RE05-011-4505': { ean: '198520047541', memo: '印度尼西亚和越南' },
+                        'RE05-011-4506': { ean: '198520047558', memo: '菲律宾' },
+                        'RE05-011-4507': { ean: '198520113017', memo: '巴西' },
+                        'RE05-011-4508': { ean: '198520113024', memo: '巴西' } ,
+                    }
                 }
             }
         },
         mounted() {
             // let arr = []
-            // for (let i = 1; i <= 48; i++) {
+            // for (let i = 1; i <= 250; i++) {
             //     arr.push('12345' + this.get_seq(i, 4))
             // }
             // this.sns = new Set(arr)
@@ -115,8 +118,11 @@
                 this.active_order.logs.unshift(log)
                 this.local_storage('orders')
             },
+            change_mat_no() {           
+                this.order_form.ean = this.mat_enum?.[this.order_form.mat_name]?.[this.order_form.mat_no]?.ean || ''
+            },
             init_order_form() {
-                this.order_form = { orderno: '', pre: '', seq_s: 0, seq_e: 0, seq_l: 1, suf: '' }
+                this.order_form = { orderno: '', mat_name: '', mat_no: '', ean: '', pre: '', seq_s: 0, seq_e: 0, seq_l: 1, suf: '' }
             },
             init_sns() {
                 this.sns = new Set()
@@ -188,6 +194,9 @@
                         logs: [],
                         active: false,
                         t: Date.now()
+                    }
+                    for (let field of ['orderno', 'mat_name', 'mat_no', 'ean', 'pre', 'suf']) {
+                        order[field] = order[field].trim()
                     }
                     // 生成序列号明细
                     for (let i = order.seq_s; i <= order.seq_e; i++) {
@@ -330,7 +339,6 @@
                 }
                 return data
             },
-            // 待定
             async init_print_option_2(order, sns) {
                 let data = []
                 sns = Array.from(sns)
@@ -361,21 +369,22 @@
             },
             iframe_print(url) {
                 if (!url) return
-                const iframe = document.createElement('iframe');
-                iframe.style.position = 'fixed';
-                iframe.style.right = '0';
-                iframe.style.bottom = '0';
-                iframe.style.width = '0';
-                iframe.style.height = '0';
-                iframe.style.border = '0';
-                document.body.appendChild(iframe);
-
+                // const iframe = document.createElement('iframe');
+                // iframe.style.position = 'fixed';
+                // iframe.style.right = '0';
+                // iframe.style.bottom = '0';
+                // iframe.style.width = '0';
+                // iframe.style.height = '0';
+                // iframe.style.border = '0';
+                // document.body.appendChild(iframe);
+                const iframe = this.$refs.iframe
                 iframe.src = url;
                 iframe.onload = () => {
                     iframe.contentWindow.focus();
                     iframe.contentWindow.print();
+                    console.log('>>> after print', iframe)
                     setTimeout(() => {
-                        document.body.removeChild(iframe); // 打印完成后清理
+                        // document.body.removeChild(iframe); // 打印完成后清理
                         URL.revokeObjectURL(url); // 释放内存
                     }, 1000);
                 };
@@ -390,11 +399,11 @@
                 if (this.sns.size <= 200) {
                     data = await this.init_print_option(this.active_order, this.sns)
                     // console.log('>>> print data', data)
-                    pdf_url = gen_stihl_pallet_label(data)
+                    pdf_url = gen_stihl_pallet_label(data, this.setting.print_copies)
                 } else {
                     data = await this.init_print_option_2(this.active_order, this.sns)
                     // console.log('>>> print data', data)
-                    pdf_url = gen_stihl_pallet_label_2(data)
+                    pdf_url = gen_stihl_pallet_label_2(data, this.setting.print_copies)
                 }
                 if (pdf_url) {
                     this.iframe_print(pdf_url)
@@ -411,11 +420,13 @@
                 let pdf_url = ''
                 if (sns.length <= 200) {
                     data = await this.init_print_option(this.drawer_order, sns)
+                    console.log('>>> print data', data)
                     pdf_url = gen_stihl_pallet_label(data)
                 } else {
                     data = await this.init_print_option_2(this.drawer_order, sns)
                     pdf_url = gen_stihl_pallet_label_2(data)
                 }
+                console.log('>>> print url', pdf_url)
                 this.iframe_print(pdf_url)
             }
         }
@@ -426,6 +437,8 @@
     <section>
         <!-- 绘图用画布 -->
         <canvas ref="canvas" style="display: none;"></canvas>
+        <!-- 打印窗口 -->
+        <iframe ref="iframe" style="display: none;"></iframe>
         <el-row :gutter="10">
             <el-col :md="8">
                 <!-- 扫码输入框 --> 
@@ -443,13 +456,13 @@
                     <el-col :md="12">
                         <el-descriptions title="打印设置" :column="1" size="small" border class="mb-10">
                             <template #extra>
-                                <el-button size="small" @click="dialogSettingFormVisible = true">
+                                <el-button type="primary" size="small" @click="dialogSettingFormVisible = true">
                                     <el-icon><Edit /></el-icon> 修改
                                 </el-button>
                             </template>
                             <el-descriptions-item label="每托最大序列号数量">{{ setting?.sn_limit }}</el-descriptions-item>
                             <el-descriptions-item label="序列号已满自动打印">{{ setting?.auto_print ? '是' : '否' }}</el-descriptions-item>
-                            <!-- <el-descriptions-item label="打印后自动清空序列号">{{ setting?.auto_clear_after_print ? '是' : '否' }}</el-descriptions-item> -->
+                            <el-descriptions-item label="打印份数">{{ setting?.print_copies }}</el-descriptions-item>
                         </el-descriptions>
                     </el-col>
                     <el-col :md="12">
@@ -497,7 +510,7 @@
                         </template>
                     </el-popconfirm>
                     <el-button type="info" @click="export_order">导出</el-button>
-                    <!-- <el-button type="warning" @click="debug">DEBUG</el-button> -->
+                    <el-button type="warning" @click="debug">DEBUG</el-button>
                 </div>
                 <el-table ref="orderTable" :data="orders" height="800">
                     <el-table-column type="selection" width="40" />
@@ -548,9 +561,9 @@
                 <el-form-item label="序列号已满自动打印">
                     <el-switch v-model="setting.auto_print" @change="local_storage('setting')" />
                 </el-form-item>
-                <!-- <el-form-item label="打印后自动清空序列号">
-                    <el-switch v-model="setting.auto_clear_after_print" @change="local_storage('setting')" />
-                </el-form-item> -->
+                <el-form-item label="打印份数">
+                    <el-input-number v-model="setting.print_copies" :min="1" :max="4" @change="local_storage('setting')" />
+                </el-form-item>
             </el-form>
             <template #footer>
                 <div class="dialog-footer">
@@ -566,13 +579,20 @@
                     <el-input v-model="order_form.orderno" />
                 </el-form-item>
                 <el-form-item label="产品名称" prop="mat_name">
-                    <el-input v-model="order_form.mat_name" />
+                    <el-select v-model="order_form.mat_name" placeholder="Select" style="width: 100%;">
+                        <el-option v-for="(v, k) in mat_enum" :key="k" :label="k" :value="k" />
+                    </el-select>
                 </el-form-item>
                 <el-form-item label="产品编码" prop="mat_no">
-                    <el-input v-model="order_form.mat_no" />
+                    <el-select v-model="order_form.mat_no" placeholder="Select" style="width: 100%;" @change="change_mat_no">
+                        <el-option v-for="(v, k) in (mat_enum[order_form.mat_name] || {})" :key="k" :label="k" :value="k">
+                            <span style="float: left">{{ k }}</span>
+                            <span class="option-right">{{ v.memo }}</span>
+                        </el-option>
+                    </el-select>
                 </el-form-item>
                 <el-form-item label="EAN编码" prop="ean">
-                    <el-input v-model="order_form.ean" />
+                    <el-input v-model="order_form.ean" readonly />
                 </el-form-item>
                 <el-form-item label="序列号前缀" prop="pre">
                     <el-input v-model="order_form.pre" />
@@ -585,9 +605,9 @@
                     </el-col>
                     <el-col :span="12">
                         流水号预览：
-                        <el-text type="success" size="large">{{ order_form.pre }}</el-text>
+                        <el-text type="success" size="large">{{ order_form.pre?.trim() }}</el-text>
                         <el-text type="warning" size="large">{{ get_seq(order_form.seq_s, order_form.seq_l)  }}</el-text>
-                        <el-text type="danger" size="large">{{ order_form.suf }}</el-text>
+                        <el-text type="danger" size="large">{{ order_form.suf?.trim() }}</el-text>
                     </el-col>
                 </el-row>
                 <el-row :gutter="10">
@@ -598,9 +618,9 @@
                     </el-col>
                     <el-col :span="12">
                         流水号预览：
-                        <el-text type="success" size="large">{{ order_form.pre }}</el-text>
+                        <el-text type="success" size="large">{{ order_form.pre?.trim() }}</el-text>
                         <el-text type="warning" size="large">{{ get_seq(order_form.seq_e, order_form.seq_l)  }}</el-text>
-                        <el-text type="danger" size="large">{{ order_form.suf }}</el-text>
+                        <el-text type="danger" size="large">{{ order_form.suf?.trim() }}</el-text>
                     </el-col>
                 </el-row>
                 <el-form-item label="流水号长度" prop="seq_l">
@@ -613,7 +633,7 @@
             <template #footer>
                 <div class="dialog-footer">
                     <el-button @click="dialogOrderFormVisible = false">关闭</el-button>
-                    <el-button @click="save_order">保存</el-button>
+                    <el-button type="primary" @click="save_order">保存</el-button>
                 </div>
             </template>
         </el-dialog>
@@ -636,11 +656,11 @@
                             placement="top"
                             hollow
                             >
-                            <el-tag v-for="(v, index) in log.sns" :key="index" size="small" round>{{ v }}</el-tag>
-                            <br>
+                            <p>{{  log.sns.join(', ')  }}</p>
+                            <!-- <el-tag v-for="(v, index) in log.sns" :key="index" size="small" round>{{ v }}</el-tag> -->
                             <el-popconfirm title="确认重新打印吗？" placement="bottom-end" width="160px" @confirm="reprint(log.sns)">
                                 <template #reference>
-                                    <el-link  underline="always" style="font-size: 12px;">重新打印</el-link>
+                                    <el-link type="primary" underline="always" style="font-size: 12px;">重新打印</el-link>
                                 </template>
                             </el-popconfirm>
                         </el-timeline-item>
@@ -698,7 +718,6 @@
         justify-content: space-between;
     }
     .mb-10 { margin-bottom: 10px; }
-    .mb-15 { margin-bottom: 15px; }
     .mr-10 { margin-right: 10px; }
     .print-btn {
         height: 100px;
@@ -708,5 +727,10 @@
     .drawer-tab-container {
         overflow: auto;
         max-height: calc(100vh - 172px);
+    }
+    .option-right {
+        float: right;
+        color: var(--el-text-color-secondary);
+        font-size: 13px;
     }
 </style>
